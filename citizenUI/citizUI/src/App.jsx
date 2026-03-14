@@ -1,3 +1,6 @@
+// import AIAssistant from "@/components/AIAssistant";
+import aiAssistant from "./aiAssistant.jsx";
+
 import { useEffect, useMemo, useState } from 'react'
 import chattisgarhLogo from '../chattisgarhLogo.png'
 import './App.css'
@@ -10,6 +13,7 @@ import {
   Tooltip,
   ResponsiveContainer
 } from "recharts"
+import AIAssistant from './aiAssistant.jsx'
 const translations = {
   hi: {
     dashboard: "CSC ऑपरेटर डैशबोर्ड",
@@ -31,6 +35,9 @@ const translations = {
   }
 }
 function App() {
+  const [selectedFiles, setSelectedFiles] = useState([])
+  const [validationResults, setValidationResults] = useState([])
+  const [isValidating, setIsValidating] = useState(false)
   const [analyticsData, setAnalyticsData] = useState([
     { name: "Mon", applications: 12, completed: 8 },
     { name: "Tue", applications: 19, completed: 11 },
@@ -56,6 +63,39 @@ function App() {
     if (applicationsToday === 0) return 0
     return Math.round((processedToday / applicationsToday) * 100)
   }, [liveStats])
+
+  function handleFileUpload(e) {
+    const files = Array.from(e.target.files)
+    setSelectedFiles(files)
+    setValidationResults([])
+  }
+
+  function validateDocument() {
+    if (selectedFiles.length === 0) return
+    setIsValidating(true)
+
+    setTimeout(() => {
+      const results = selectedFiles.map((file) => {
+        const statusTypes = ["Valid", "Warning", "Error"]
+        const status = statusTypes[Math.floor(Math.random() * statusTypes.length)]
+
+        let message = ""
+
+        if (status === "Valid") message = "दस्तावेज़ सफलतापूर्वक सत्यापित"
+        if (status === "Warning") message = "दस्तावेज़ स्पष्ट नहीं है, मैन्युअल जांच करें"
+        if (status === "Error") message = "दस्तावेज़ प्रकार पहचाना नहीं गया"
+
+        return {
+          name: file.name,
+          status,
+          message
+        }
+      })
+
+      setValidationResults(results)
+      setIsValidating(false)
+    }, 2000)
+  }
 
   useEffect(() => {
     const initGoogleTranslate = () => {
@@ -105,7 +145,6 @@ function App() {
         return [...next, { name: label, applications, completed }]
       })
     }, 2000)
-
     return () => {
       clearInterval(interval)
       if (window.googleTranslateElementInit) {
@@ -139,7 +178,7 @@ function App() {
     <div className="min-h-screen bg-[#F5F6F8] text-gray-800">
 
       {/* HEADER */}
-      <header className="bg-[#FF9933] text-black">
+      <header className="bg-[#FF9933] text-white">
         <div className="flex justify-between items-center px-6 py-4">
 
           <div className="flex items-center gap-3 ">
@@ -166,21 +205,21 @@ function App() {
 
             <button
             onClick={()=>translatePage("hi")}
-            className="border border-black px-2 py-1"
+            className="border border-white px-2 py-1"
             >
             हिन्दी
             </button>
 
             <button
             onClick={()=>translatePage("en")}
-            className="border border-black px-2 py-1"
+            className="border border-white px-2 py-1"
             >
             English
             </button>
 
             <span>ऑपरेटर: राहुल</span>
 
-            <button className="bg-black text-white px-4 py-1">
+            <button className=" border border-white text-white px-4 py-1">
             लॉगआउट
             </button>
 
@@ -388,14 +427,113 @@ function App() {
             </table>
 
           </section>
+      {/* Form Validation */}
+      <section className="bg-white border rounded-lg shadow-sm p-6">
 
-         
+      <h2 className="font-semibold text-lg mb-4">
+      दस्तावेज़ सत्यापन (AI जांच)
+      </h2>
+
+      <div className="flex items-center gap-4">
+
+      <input
+      type="file"
+      multiple
+      onChange={handleFileUpload}
+      className="border border-gray-300 rounded px-3 py-2 text-sm"
+      />
+
+      <button
+      onClick={validateDocument}
+      className="bg-[#FF9933] px-5 py-2 rounded text-black"
+      >
+      अपलोड करें और जांचें
+      </button>
+
+      </div>
+
+      <p className="mt-3 text-sm text-gray-500">
+      एक नागरिक के सभी दस्तावेज़ (आधार, आय प्रमाण पत्र आदि) एक साथ अपलोड करें।
+      </p>
+
+      {/* Selected Files */}
+
+      {selectedFiles.length > 0 && (
+
+      <div className="mt-4 border rounded bg-gray-50 p-3">
+
+      <h3 className="text-sm font-semibold mb-2">
+      अपलोड किए गए दस्तावेज़
+      </h3>
+
+      <ul className="text-sm space-y-1">
+
+      {selectedFiles.map((file, index) => (
+
+      <li key={index}>
+      📄 {file.name}
+      </li>
+
+      ))}
+
+      </ul>
+
+      </div>
+
+      )}
+
+      {/* Loading */}
+
+      {isValidating && (
+
+      <div className="mt-4 text-blue-600 text-sm">
+      AI सभी दस्तावेज़ों की जांच कर रहा है...
+      </div>
+
+      )}
+
+      {/* Results */}
+
+      {validationResults.length > 0 && (
+
+      <div className="mt-4 space-y-2">
+
+      <h3 className="text-sm font-semibold">
+      सत्यापन परिणाम
+      </h3>
+
+      {validationResults.map((result, index) => (
+
+      <div
+      key={index}
+      className={`p-3 border rounded text-sm
+      ${result.status === "Valid"
+      ? "bg-green-50 text-green-700 border-green-200"
+      : result.status === "Warning"
+      ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+      : "bg-red-50 text-red-700 border-red-200"}
+      `}
+      >
+
+      <strong>{result.name}</strong> <br/>
+      स्थिति: {result.status} <br/>
+      {result.message}
+
+      </div>
+
+      ))}
+
+      </div>
+
+      )}
+
+      </section>
         </main>
 
       </div>
+      <AIAssistant />
     </div>
   )
 }
 
 export default App
-
