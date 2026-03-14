@@ -1,0 +1,18 @@
+# %%
+import pytesseract
+from PIL import Image
+
+pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
+def read_document(image_path):
+    image = Image.open(image_path)
+    print("Image opened:", image.size, image.mode)
+
+    text = pytesseract.image_to_string(image, timeout=15)
+    return text
+
+print(pytesseract.get_tesseract_version())
+# print(read_document(r"C:\Users\surya\OneDrive\Pictures\296b1b8692eafadc34b6eb00c75d8038.jpg"))
+
+
+
