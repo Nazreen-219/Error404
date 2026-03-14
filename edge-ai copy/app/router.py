@@ -48,3 +48,15 @@ def assistant(question: str):
 @router.post("/translate")
 def translate_text(text: str, target: str = "hi"):
     return {"translated": translate(text, target)}
+
+#for voice assistant
+from assistant.voice_assistant import get_voice_input
+
+@router.get("/voice-input")
+def voice():
+
+    text = get_voice_input()
+
+    return {
+        "speech_text": text
+    }
