@@ -31,6 +31,67 @@ def _normalize_date(value: str) -> str:
     return value.replace(".", "/").replace("-", "/").upper()
 
 
+def _normalize_ocr_date(value: str):
+    if not value:
+        return None
+
+    token = value.strip().upper().replace(".", "/").replace("-", "/")
+    token = token.replace("I", "1").replace("L", "1").replace("|", "1").replace("O", "0")
+    parts = token.split("/")
+    if len(parts) != 3:
+        return None
+
+    day_str, month_str, year_str = parts[0], parts[1], parts[2]
+    if not (day_str.isdigit() and month_str.isdigit() and year_str.isdigit()):
+        return None
+    if len(year_str) != 4:
+        return None
+
+    day = int(day_str)
+    month = int(month_str)
+    year = int(year_str)
+
+    # OCR fix for common PAN-DOB confusion: 11 read as 19.
+    if month > 12 and month_str.startswith("1"):
+        month = 11
+
+    if not (1 <= day <= 31 and 1 <= month <= 12 and 1900 <= year <= 2100):
+        return None
+
+    return f"{day:02d}/{month:02d}/{year:04d}"
+
+
+def _normalize_pan_ocr_token(token: str):
+    if not token:
+        return None
+
+    cleaned = re.sub(r"[^A-Z0-9]", "", token.upper())
+    if len(cleaned) != 10:
+        return None
+
+    first = cleaned[:5]
+    mid = cleaned[5:9]
+    last = cleaned[9]
+
+    if not first.isalpha() or not last.isalpha():
+        return None
+
+    repl = {
+        "I": "1",
+        "L": "1",
+        "O": "0",
+        "Q": "0",
+        "Z": "2",
+        "S": "5",
+        "B": "8",
+    }
+    mid_norm = "".join(repl.get(ch, ch) for ch in mid)
+    if not mid_norm.isdigit():
+        return None
+
+    return f"{first}{mid_norm}{last}"
+
+
 def _find_date(text: str):
     match = re.search(DATE_PATTERN, text or "", re.IGNORECASE)
     if not match:
@@ -86,29 +147,77 @@ def parse_aadhaar(text: str):
 
 def parse_pan(text: str):
     data = {}
-    text = (text or "").upper()
+    original_text = text or ""
+    text = original_text.upper()
 
     pan = re.search(r"\b([A-Z]{5}\s?[0-9]{4}\s?[A-Z])\b", text)
     if pan:
         data["pan_number"] = pan.group(1).replace(" ", "")
-        return data
+
+    if "pan_number" not in data:
+        noisy_pan = re.search(r"\b([A-Z]{5}[0-9ILOZS]{4}[A-Z])\b", text)
+        if noisy_pan:
+            fixed = _normalize_pan_ocr_token(noisy_pan.group(1))
+            if fixed:
+                data["pan_number"] = fixed
 
     # Fallback for OCR-distorted PAN samples (kept separate from strict PAN format).
     pan_label_value = _extract_label_value(text, [r"\bPERMANENT\s+ACCOUNT\s+NUMBER\b", r"\bPAN\b"])
-    if pan_label_value:
+    if pan_label_value and "pan_number" not in data:
         token = re.sub(r"[^A-Z0-9]", "", pan_label_value.upper())
         if len(token) >= 8:
             data["pan_number_raw"] = token[:12]
-            return data
 
     token_candidates = re.findall(r"\b[A-Z0-9]{8,12}\b", text)
-    if re.search(r"\b(pan|account|income\s+tax)\b", text, re.IGNORECASE):
+    if "pan_number" not in data and re.search(r"\b(pan|account|income\s+tax)\b", text, re.IGNORECASE):
         for token in token_candidates:
-            if token in {"GOVTOFINDIA", "INCOMETAX"}:
+            if token in {"GOVTOFINDIA", "INCOMETAX", "DEPARTMENT", "PERMANENT", "ACCOUNT", "NUMBER"}:
                 continue
             if len(token) == 10 and re.search(r"[A-Z]{5,}", token):
                 data["pan_number_raw"] = token
                 break
+
+    dob_match = re.search(r"\b(\d{2}[\/\-.][0-9ILO]{2}[\/\-.]\d{4})\b", original_text, re.IGNORECASE)
+    if dob_match:
+        dob = _normalize_ocr_date(dob_match.group(1))
+        if dob:
+            data["dob"] = dob
+
+    lines = [line.strip() for line in original_text.splitlines() if line.strip()]
+    for idx, line in enumerate(lines):
+        cleaned = re.sub(r"[^A-Za-z ]", "", line).strip()
+        if not cleaned:
+            continue
+        lower = cleaned.lower()
+        if "income tax" in lower or "department" in lower or "govt" in lower or "india" in lower:
+            for j in range(idx + 1, min(idx + 6, len(lines))):
+                candidate = re.sub(r"[^A-Za-z ]", "", lines[j]).strip()
+                candidate_lower = candidate.lower()
+                if (
+                    4 <= len(candidate) <= 40
+                    and len(candidate.split()) >= 2
+                    and all(w not in candidate_lower for w in ["govt", "india", "sample", "immihelp", "department"])
+                ):
+                    data["name"] = " ".join(word.capitalize() for word in candidate.split())
+                    break
+            if "name" in data:
+                break
+
+    # Fallback name pick near date when header context is noisy.
+    if "name" not in data and lines:
+        date_idx = None
+        for i, line in enumerate(lines):
+            if re.search(r"\d{2}[\/\-.][0-9ILO]{2}[\/\-.]\d{4}", line, re.IGNORECASE):
+                date_idx = i
+                break
+        if date_idx is not None:
+            for j in range(max(0, date_idx - 12), date_idx):
+                candidate = re.sub(r"[^A-Za-z ]", "", lines[j]).strip()
+                if 4 <= len(candidate) <= 40 and len(candidate.split()) >= 2:
+                    cand_low = candidate.lower()
+                    if all(w not in cand_low for w in ["govt", "india", "sample", "immihelp", "department"]):
+                        data["name"] = " ".join(word.capitalize() for word in candidate.split())
+                        break
 
     return data
 
