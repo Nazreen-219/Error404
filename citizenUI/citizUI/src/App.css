@@ -1,0 +1,67 @@
+.goog-te-banner-frame {
+display:none !important;
+}
+
+body {
+top: 0 !important;
+}
+
+html {
+top: 0 !important;
+}
+
+#goog-gt-tt,
+.goog-tooltip,
+.goog-tooltip:hover,
+.goog-text-highlight,
+.goog-te-balloon-frame,
+.goog-te-banner-frame.skiptranslate {
+display: none !important;
+}
+
+body > .skiptranslate {
+display: none !important;
+}
+
+.goog-logo-link {
+display:none !important;
+}
+
+.goog-te-gadget {
+font-size:0px !important;
+}
+.ticker-wrapper{
+overflow:hidden;
+width:100%;
+background:#fff8e1;
+padding:8px 0;
+}
+
+.ticker{
+display:flex;
+white-space:nowrap;
+animation:tickerMove 20s linear infinite;
+}
+
+.ticker-item{
+margin-right:50px;
+font-size:14px;
+}
+
+@keyframes tickerMove{
+
+0%{
+transform:translateX(0);
+}
+
+100%{
+transform:translateX(-50%);
+}
+
+}
+
+.ticker-wrapper{
+background:#FF9933;
+color:black;
+font-weight:500;
+}
