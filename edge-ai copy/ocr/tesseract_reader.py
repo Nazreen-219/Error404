@@ -43,19 +43,73 @@ def extract_aadhaar_data(text: str):
     if dob_match:
         data["dob"] = dob_match.group()
 
-    lines = text.split("\n")
-    for line in lines:
-        line = line.strip()
-        if len(line) <= 3:
-            continue
+    def is_name_candidate(line: str) -> bool:
+        cleaned = re.sub(r"[^A-Za-z\s]", "", line).strip()
+        if not cleaned:
+            return False
 
-        lower_line = line.lower()
-        if any(x in lower_line for x in ["government", "india", "uidai", "dob"]):
-            continue
+        if cleaned != line.strip():
+            return False
+        if len(cleaned) < 5 or len(cleaned) > 40:
+            return False
+        if re.search(r"\d", cleaned):
+            return False
 
-        if re.fullmatch(r"[A-Za-z ]+", line):
-            data["name"] = line
-            break
+        lower = cleaned.lower()
+        stopwords = [
+            "government",
+            "india",
+            "uidai",
+            "aadhaar",
+            "information",
+            "enrolment",
+            "address",
+            "district",
+            "state",
+            "sub district",
+            "pin code",
+            "mobile",
+            "male",
+            "female",
+            "dob",
+            "father",
+            "husband",
+            "wife",
+            "signature",
+            "verified",
+        ]
+        if any(word in lower for word in stopwords):
+            return False
+
+        words = cleaned.split()
+        if len(words) < 2 or len(words) > 4:
+            return False
+        if any(len(word) < 2 for word in words):
+            return False
+
+        # Prefer human-like mixed case name tokens.
+        title_like = sum(1 for word in words if word[:1].isupper() and word[1:].islower())
+        if title_like >= 1:
+            return True
+        return False
+
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+
+    # Aadhaar letters often contain a "To" block; prioritize names near it.
+    for i, line in enumerate(lines):
+        if line.lower() == "to":
+            for j in range(i + 1, min(i + 6, len(lines))):
+                if is_name_candidate(lines[j]):
+                    data["name"] = lines[j]
+                    break
+            if data["name"]:
+                break
+
+    # Fallback: choose the strongest name-like line in the whole OCR text.
+    if not data["name"]:
+        candidates = [line for line in lines if is_name_candidate(line)]
+        if candidates:
+            data["name"] = max(candidates, key=lambda s: len(s.split()))
 
     return data
 
