@@ -32,7 +32,7 @@ def listen_loop(on_text: Callable[[str], None]) -> None:
     model = Model(str(model_path))
 
     mic = pyaudio.PyAudio()
-    device_index = 1
+    device_index = 4
     device_info = mic.get_device_info_by_index(device_index)
     sample_rate = int(device_info.get("defaultSampleRate", 16000))
 

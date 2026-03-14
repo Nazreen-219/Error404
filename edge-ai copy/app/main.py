@@ -1,10 +1,12 @@
+from pathlib import Path
+import sys
+
 from fastapi import FastAPI
 
-try:
-    from app.router import router
-except ModuleNotFoundError:
-    # Allows running this file directly: `python app/main.py`
-    from router import router
+if __package__ in (None, ""):
+    sys.path.append(str(Path(__file__).resolve().parents[1]))
+
+from app.router import router
 
 app = FastAPI(
     title="CSC Edge AI Assistant",

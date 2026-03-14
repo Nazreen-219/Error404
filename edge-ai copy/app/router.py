@@ -7,6 +7,7 @@ if __package__ in (None, ""):
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from assistant.ollama_client import ask_llm
+from assistant.voice_assistant import process_voice_input
 from ocr.document_matcher import process_document
 from translation.translator import translate
 from validators.form_validator import validate_form
@@ -49,14 +50,11 @@ def assistant(question: str):
 def translate_text(text: str, target: str = "hi"):
     return {"translated": translate(text, target)}
 
-#for voice assistant
-from assistant.voice_assistant import get_voice_input
-
 @router.get("/voice-input")
 def voice():
-
-    text = get_voice_input()
-
-    return {
-        "speech_text": text
-    }
+    try:
+        return process_voice_input()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

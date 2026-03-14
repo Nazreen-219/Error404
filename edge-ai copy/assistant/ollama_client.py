@@ -1,26 +1,51 @@
 import json
-from urllib import error, request
+import re
+
+import requests
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
 
 
-def ask_llm(question: str, model: str = "llama3.2"):
-    payload = json.dumps(
-        {
-            "model": model,
-            "prompt": question,
-            "stream": False,
+def ask_llm(prompt: str):
+
+    payload = {
+        "model": "llama3",
+        "prompt": prompt,
+        "stream": False,
+        "options": {
+            "temperature": 0.2
         }
-    ).encode("utf-8")
-    req = request.Request(
-        "http://127.0.0.1:11434/api/generate",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    }
 
-    try:
-        with request.urlopen(req, timeout=30) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except error.URLError:
-        return "Ollama is not reachable on http://127.0.0.1:11434."
+    response = requests.post(OLLAMA_URL, json=payload, timeout=60)
+    response.raise_for_status()
+
+    data = response.json()
 
     return data.get("response", "").strip()
+
+
+def parse_llm_json(response_text: str):
+    cleaned = response_text.strip()
+
+    if not cleaned:
+        raise ValueError("LLM returned an empty response")
+
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError as exc:
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+        raise ValueError(f"LLM did not return valid JSON: {exc}. Raw response: {cleaned}") from exc
