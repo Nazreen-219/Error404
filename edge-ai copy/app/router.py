@@ -52,10 +52,12 @@ def translate_text(text: str, target: str = "hi"):
 #for voice assistant
 from assistant.voice_assistant import get_voice_input
 
-@router.get("/voice-input")
+@router.post("/voice-input")
 def voice():
-
-    text = get_voice_input()
+    try:
+        text = get_voice_input()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return {
         "speech_text": text
