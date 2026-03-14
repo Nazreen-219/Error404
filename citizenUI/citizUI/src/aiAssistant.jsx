@@ -1,11 +1,15 @@
 // components/AIAssistant.jsx
 import { useEffect, useRef, useState } from "react";
 
+const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
+const EDGE_AI_BASE_URL = import.meta.env.VITE_EDGE_AI_URL || "http://127.0.0.1:8000";
+
 export default function AIAssistant() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
+  const [edgeListening, setEdgeListening] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const recognitionRef = useRef(null);
 
@@ -54,13 +58,13 @@ export default function AIAssistant() {
 
     // Example: call your backend API (Node.js/Flask) for AI response
     try {
-      const res = await fetch("http://localhost:5000/copilot", {
+      const res = await fetch(`${BACKEND_BASE_URL}/copilot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: input }),
       });
       const data = await res.json();
-      const aiMessage = { sender: "ai", text: data.answer || "AI did not respond" };
+      const aiMessage = { sender: "ai", text: data.answer || data.response || "AI did not respond" };
       setMessages((prev) => [...prev, aiMessage]);
       if (voiceEnabled && "speechSynthesis" in window) {
         const utterance = new SpeechSynthesisUtterance(aiMessage.text);
@@ -70,6 +74,34 @@ export default function AIAssistant() {
     } catch (err) {
       const errorMsg = { sender: "ai", text: "Error connecting to AI service." };
       setMessages((prev) => [...prev, errorMsg]);
+    }
+  };
+
+  const captureVoiceFromEdge = async () => {
+    setEdgeListening(true);
+    try {
+      const res = await fetch(`${EDGE_AI_BASE_URL}/voice-input`, {
+        method: "POST",
+      });
+
+      const data = await res.json();
+      const speechText = data.speech_text || "";
+
+      if (speechText) {
+        setInput((prev) => (prev ? `${prev} ${speechText}` : speechText));
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: "AI STT did not return any text." },
+        ]);
+      }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { sender: "ai", text: "Error connecting to edge speech-to-text service." },
+      ]);
+    } finally {
+      setEdgeListening(false);
     }
   };
 
@@ -159,6 +191,18 @@ export default function AIAssistant() {
                 <path d="M12 17v5" />
                 <path d="M8 22h8" />
               </svg>
+            </button>
+            <button
+              type="button"
+              className={`border px-3 py-2 rounded-lg text-xs ${
+                edgeListening ? "bg-orange-100 border-orange-300 text-orange-700" : "bg-white"
+              }`}
+              onClick={captureVoiceFromEdge}
+              disabled={edgeListening}
+              title="Use edge speech-to-text model"
+              aria-label="AI speech input"
+            >
+              {edgeListening ? "Listening..." : "AI STT"}
             </button>
             <button
               className="bg-orange-500 text-white px-4 rounded-lg hover:bg-orange-600"

@@ -1,5 +1,4 @@
 // import AIAssistant from "@/components/AIAssistant";
-import aiAssistant from "./aiAssistant.jsx";
 
 import { useEffect, useMemo, useState } from 'react'
 import chattisgarhLogo from '../chattisgarhLogo.png'
@@ -14,6 +13,7 @@ import {
   ResponsiveContainer
 } from "recharts"
 import AIAssistant from './aiAssistant.jsx'
+const EDGE_AI_BASE_URL = import.meta.env.VITE_EDGE_AI_URL || "http://127.0.0.1:8000"
 const translations = {
   hi: {
     dashboard: "CSC ऑपरेटर डैशबोर्ड",
@@ -38,6 +38,8 @@ function App() {
   const [selectedFiles, setSelectedFiles] = useState([])
   const [validationResults, setValidationResults] = useState([])
   const [isValidating, setIsValidating] = useState(false)
+  const [ocrPaths, setOcrPaths] = useState("")
+  const [ocrError, setOcrError] = useState("")
   const [analyticsData, setAnalyticsData] = useState([
     { name: "Mon", applications: 12, completed: 8 },
     { name: "Tue", applications: 19, completed: 11 },
@@ -68,6 +70,7 @@ function App() {
     const files = Array.from(e.target.files)
     setSelectedFiles(files)
     setValidationResults([])
+    setOcrError("")
   }
 
   function validateDocument() {
@@ -95,6 +98,58 @@ function App() {
       setValidationResults(results)
       setIsValidating(false)
     }, 2000)
+  }
+
+  async function runEdgeOcrPrediction() {
+    const manualPaths = ocrPaths
+      .split("\n")
+      .map((path) => path.trim())
+      .filter(Boolean)
+
+    if (manualPaths.length === 0) {
+      setOcrError("Enter at least one local file path for edge OCR prediction.")
+      return
+    }
+
+    setOcrError("")
+    setIsValidating(true)
+
+    try {
+      const calls = manualPaths.map(async (filePath) => {
+        const response = await fetch(
+          `${EDGE_AI_BASE_URL}/ocr?file_path=${encodeURIComponent(filePath)}`,
+          { method: "POST" }
+        )
+        const data = await response.json()
+
+        if (!response.ok) {
+          return {
+            name: filePath,
+            status: "Error",
+            message: data.detail || data.error || "OCR prediction failed",
+          }
+        }
+
+        const extractedCount = Object.keys(data.extracted_data || {}).length
+        const isKnownType = data.document_type && data.document_type !== "unknown"
+
+        return {
+          name: filePath,
+          status: isKnownType ? "Valid" : "Warning",
+          message: isKnownType
+            ? `Type: ${data.document_type}, Extracted fields: ${extractedCount}`
+            : "Document type is unknown. Manual review recommended.",
+        }
+      })
+
+      const results = await Promise.all(calls)
+      setValidationResults(results)
+    } catch (error) {
+      setOcrError("Could not connect to edge OCR service.")
+      setValidationResults([])
+    } finally {
+      setIsValidating(false)
+    }
   }
 
   useEffect(() => {
@@ -444,7 +499,7 @@ function App() {
       />
 
       <button
-      onClick={validateDocument}
+      onClick={runEdgeOcrPrediction}
       className="bg-[#FF9933] px-5 py-2 rounded text-black"
       >
       अपलोड करें और जांचें
@@ -452,9 +507,23 @@ function App() {
 
       </div>
 
+      <textarea
+      value={ocrPaths}
+      onChange={(e) => setOcrPaths(e.target.value)}
+      rows={3}
+      placeholder="Enter one local file path per line, e.g. C:\\docs\\aadhaar.jpg"
+      className="mt-3 w-full border border-gray-300 rounded px-3 py-2 text-sm"
+      />
+
       <p className="mt-3 text-sm text-gray-500">
       एक नागरिक के सभी दस्तावेज़ (आधार, आय प्रमाण पत्र आदि) एक साथ अपलोड करें।
       </p>
+      <p className="mt-1 text-xs text-gray-500">
+      For direct edge OCR, use file paths in the box above.
+      </p>
+      {ocrError && (
+      <div className="mt-3 text-sm text-red-600">{ocrError}</div>
+      )}
 
       {/* Selected Files */}
 
